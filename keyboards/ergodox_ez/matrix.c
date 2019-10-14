@@ -1,9 +1,5 @@
 /*
 
-Note for ErgoDox EZ customizers: Here be dragons!
-This is not a file you want to be messing with.
-All of the interesting stuff for you is under keymaps/ :)
-Love, Erez
 
 Copyright 2013 Oleg Kostyuk <cub.uanic@gmail.com>
 
@@ -35,6 +31,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "matrix.h"
 #include "debounce.h"
 #include QMK_KEYBOARD_H
+
+// Only enable this if console is enabled to print to
+#if defined(DEBUG_MATRIX_SCAN_RATE) && !defined(CONSOLE_ENABLE)
+#    undef DEBUG_MATRIX_SCAN_RATE
+#endif
+
 #ifdef DEBUG_MATRIX_SCAN_RATE
 #  include "timer.h"
 #endif
@@ -50,10 +52,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * something else might be wrong. (Also, the scan speed has improved since
  * that comment was written.)
  */
-
-#ifndef DEBOUNCE
-#  define DEBOUNCE 5
-#endif
 
 /* matrix state(1:on, 0:off) */
 static matrix_row_t raw_matrix[MATRIX_ROWS];  // raw values
@@ -95,7 +93,7 @@ void matrix_init(void) {
   // initialize matrix state: all keys off
   for (uint8_t i = 0; i < MATRIX_ROWS; i++) {
     matrix[i]     = 0;
-    raw_matrix[i] = 0;    
+    raw_matrix[i] = 0;
   }
 
 #ifdef DEBUG_MATRIX_SCAN_RATE
@@ -121,6 +119,17 @@ void matrix_power_up(void) {
   matrix_timer      = timer_read32();
   matrix_scan_count = 0;
 #endif
+}
+
+// Reads and stores a row, returning
+// whether a change occurred.
+static inline bool store_raw_matrix_row(uint8_t index) {
+  matrix_row_t temp = read_cols(index);
+  if (raw_matrix[index] != temp) {
+    raw_matrix[index] = temp;
+    return true;
+  }
+  return false;
 }
 
 uint8_t matrix_scan(void) {
@@ -157,22 +166,24 @@ uint8_t matrix_scan(void) {
 #ifdef LEFT_LEDS
   mcp23018_status = ergodox_left_leds_update();
 #endif  // LEFT_LEDS
+  bool changed = false;
   for (uint8_t i = 0; i < MATRIX_ROWS_PER_SIDE; i++) {
     // select rows from left and right hands
-    select_row(i);
-    select_row(i + MATRIX_ROWS_PER_SIDE);
+    uint8_t left_index = i;
+    uint8_t right_index = i + MATRIX_ROWS_PER_SIDE;
+    select_row(left_index);
+    select_row(right_index);
 
     // we don't need a 30us delay anymore, because selecting a
     // left-hand row requires more than 30us for i2c.
 
-    // grab left + right cols.
-    raw_matrix[i] = read_cols(i);    
-    raw_matrix[i+MATRIX_ROWS_PER_SIDE] = read_cols(i+MATRIX_ROWS_PER_SIDE);
-    
+    changed |= store_raw_matrix_row(left_index);
+    changed |= store_raw_matrix_row(right_index);
+
     unselect_rows();
   }
-  
-  debounce(raw_matrix, matrix, MATRIX_ROWS, true);
+
+  debounce(raw_matrix, matrix, MATRIX_ROWS, changed);
   matrix_scan_quantum();
 
   return 1;

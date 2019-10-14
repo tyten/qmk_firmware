@@ -25,7 +25,7 @@
 #include <avr/pgmspace.h>
 
 #include "action_layer.h"
-#include "i2c.h"
+#include "i2c_master.h"
 #include "quantum.h"
 
 __attribute__ ((weak))
@@ -45,9 +45,29 @@ void rgblight_set(void) {
     }
 
     i2c_init();
-    i2c_send(0xb0, (uint8_t*)led, 3 * RGBLED_NUM);
+    i2c_transmit(0xb0, (uint8_t*)led, 3 * RGBLED_NUM, 100);
 }
 #endif
+
+void matrix_init_kb(void) {
+#ifdef RGBLIGHT_ENABLE
+    if (rgblight_config.enable) {
+        i2c_init();
+        i2c_transmit(0xb0, (uint8_t*)led, 3 * RGBLED_NUM, 100);
+    }
+#endif
+    // call user level keymaps, if any
+    matrix_init_user();
+}
+
+void matrix_scan_kb(void) {
+#ifdef RGBLIGHT_ENABLE
+    rgblight_task();
+#endif
+    matrix_scan_user();
+    /* Nothing else for now. */
+}
+
 
 void backlight_init_ports(void) {
     // initialize pins D0, D1, D4 and D6 as output
